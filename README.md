@@ -35,7 +35,6 @@ pip install pandas matplotlib
 │   ├── spike.json        # Sudden burst then back to normal
 │   └── stress.json       # Gradual increase beyond expected capacity
 ├── questions/            # (Optional) Custom question datasets
-│   ├── sample.json       # 30 CloudCIX-specific questions (included)
 │   ├── cloudcix.json     # Broader CloudCIX question set (see docs below)
 │   └── sharegpt.json     # Real-world general questions from ShareGPT (see docs below)
 └── results/              # All benchmark results (git ignored, auto-created)
@@ -243,9 +242,11 @@ A dataset of real opening questions extracted from the [ShareGPT52K](https://hug
 
 ## Understanding the Plot
 
-![TTFT Stress Test](examples/ttft_stress.png)
 
 Each run produces a four-panel plot saved to `results/{timestamp}_{preset}/ttft_{preset}.png`.
+
+Example output:
+![TTFT Stress Test](examples/ttft_stress.png)
 
 - **Panel 1 — TTFT over time** — scatter of raw time-to-first-chunk values (dots) overlaid with a cumulative p99 trend line and a final p99 reference line. A rising p99 line indicates the server is slowing down under load. The title bar shows `min`, `p99`, and `max` across the full run.
 - **Panel 2 — Chat Requests** — bar chart bucketed by time window (5s for short runs, 120s for soak runs) showing successful (green) and failed (red) chat requests. Each bar is labelled with its count. Useful for pinpointing exactly when failures started relative to load.
