@@ -74,7 +74,7 @@ const chunk_iat_ms = new Trend('chunk_inter_arrival_ms', true);
 // =============================================================================
 // VU state — persists across iterations for the lifetime of each VU
 // =============================================================================
-const vuState = { conversationId: null };
+const vuState = { conversationId: null, token: null };
 
 // =============================================================================
 // Load Profile
@@ -87,6 +87,11 @@ export const options = {
             gracefulStop: '300s',
             gracefulRampDown: '300s',
         },
+    },
+    thresholds: {
+        'ttft_ms': ['p(95)<5000'],
+        'chunk_inter_arrival_ms': ['p(95)<1000'],
+        'chat_failed': ['count<100'],
     },
 };
 
@@ -115,10 +120,34 @@ export function setup() {
 }
 
 // =============================================================================
+// Auth refresh — called when a 401 is received during the test
+// =============================================================================
+function refreshToken() {
+    console.log(`[VU ${__VU}] 🔄 Token expired — re-authenticating...`);
+    const authRes = http.post(AUTH_URL, JSON.stringify({
+        email: CLOUDCIX_API_USERNAME,
+        password: CLOUDCIX_API_PASSWORD,
+        api_key: CLOUDCIX_API_KEY,
+    }), { headers: { 'Content-Type': 'application/json' }, timeout: '10s' });
+
+    if (authRes.status !== 201) {
+        console.error(`[VU ${__VU}] ✗ Re-auth failed (${authRes.status}): ${authRes.body}`);
+        return null;
+    }
+
+    const newToken = authRes.json('token');
+    console.log(`[VU ${__VU}] ✓ Token refreshed`);
+    return newToken;
+}
+
+// =============================================================================
 // Default VU
 // =============================================================================
 export default function (data) {
-    const { token } = data;
+    // Use per-VU token if refreshed, otherwise fall back to setup token
+    if (!vuState.token) {
+        vuState.token = data.token;
+    }
 
     // ── Create conversation once per VU lifetime ─────────────────────────────
     if (vuState.conversationId === null) {
@@ -133,11 +162,20 @@ export default function (data) {
             {
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Auth-Token': token,
+                    'X-Auth-Token': vuState.token,
                 },
                 timeout: '300s',
             }
         );
+
+        // Refresh token if expired
+        if (convRes.status === 401) {
+            const newToken = refreshToken();
+            if (!newToken) { sleep(1); return; }
+            vuState.token = newToken;
+            sleep(1);
+            return; // retry next iteration with fresh token
+        }
 
         const convOk = check(convRes, { 'conversation created 201': (r) => r.status === 201 });
         if (!convOk) {
@@ -174,7 +212,7 @@ export default function (data) {
             body: JSON.stringify({ question, conversation_id: vuState.conversationId }),
             headers: {
                 'Content-Type': 'application/json',
-                'X-Auth-Token': token,
+                'X-Auth-Token': vuState.token,
                 'Accept': '*/*',
             },
             timeout: `${FIRST_CHUNK_TIMEOUT_MS}ms`,
@@ -222,7 +260,14 @@ export default function (data) {
 
     const ok = check(res, { 'status 200': (r) => r.status === 200 });
 
-    if (ok && chunkCount > 0 && !timedOut) {
+    if (res.status === 401) {
+        // Token expired — refresh silently, do not count as a failure
+        const newToken = refreshToken();
+        if (newToken) vuState.token = newToken;
+        console.warn(`[VU ${__VU}] 🔄 401 Unauthorized — token refreshed, retrying next iteration`);
+        sleep(1);
+        return;
+    } else if (ok && chunkCount > 0 && !timedOut) {
         chat_success.add(1);
     } else {
         chat_failed.add(1);

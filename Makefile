@@ -1,20 +1,20 @@
-# =============================================================================
-# Configuration
-# =============================================================================
-PRESET         ?= breaking
-QUESTIONS_FILE ?=   # filename only, e.g. sample or sharegpt (no path, no .json)
-TIMESTAMP      := $(shell date +%Y-%m-%d_%H-%M-%S)
-RUN_DIR        := results/$(TIMESTAMP)_$(PRESET)
-OUT            := $(RUN_DIR)/results.json
-PLOT           := $(RUN_DIR)/ttft_$(PRESET).png
-
-# Load .env and export all variables
+# Load .env first so its values are available before defaults are set
 ifneq (,$(wildcard .env))
     include .env
     export
 else
     $(error No .env file found. Run: make env ENV=<name>  e.g. make env ENV=production)
 endif
+
+# =============================================================================
+# Configuration — defaults applied AFTER .env so .env values win
+# =============================================================================
+PRESET         ?= breaking
+QUESTIONS_FILE ?=
+TIMESTAMP      := $(shell date +%Y-%m-%d_%H-%M-%S)
+RUN_DIR        := results/$(TIMESTAMP)_$(PRESET)
+OUT            := $(RUN_DIR)/results.json
+PLOT           := $(RUN_DIR)/ttft_$(PRESET).png
 
 # =============================================================================
 # Targets
