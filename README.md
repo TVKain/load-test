@@ -219,44 +219,10 @@ The file path is relative to the project root. The test will log how many questi
 
 A curated set of questions specifically about CloudCIX — virtual machines, networking, storage, billing, security, and the API. Best used when you want to stress test the chatbot on its intended domain and measure how it handles topic-specific load.
 
-```bash
-make run PRESET=soak QUESTIONS_FILE=./questions/cloudcix.json
-```
-
-To generate this file, run the included helper script:
-
-```bash
-python3 scripts/build_cloudcix_questions.py
-```
 
 #### `questions/sharegpt.json` — Real-World General Questions (ShareGPT)
 
 A dataset of real opening questions extracted from the [ShareGPT52K](https://huggingface.co/datasets/RyokoAI/ShareGPT52K) dataset — 52K real human-AI conversations collected from ChatGPT users and released under CC0. Using this dataset simulates realistic, unpredictable day-to-day usage rather than a narrow topic pool, which is ideal for soak and stress testing.
-
-To generate `questions/sharegpt.json`, download the raw dataset and run the extraction script:
-
-```bash
-# 1. Download the raw dataset
-wget https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json
-
-# 2. Extract the first human turn from each conversation
-python3 scripts/build_sharegpt_questions.py
-
-# 3. Run the test with the extracted questions
-make run PRESET=soak QUESTIONS_FILE=./questions/sharegpt.json
-```
-
-The extraction script pulls the opening human message from each conversation and writes up to 200 questions to `questions/sharegpt.json`. You can adjust the limit inside the script.
-
-**When to use each dataset:**
-
-| Dataset | Best for |
-|---|---|
-| `cloudcix.json` | Domain accuracy testing — does the chatbot answer CloudCIX questions well under load? |
-| `sharegpt.json` | Realistic load simulation — unpredictable, varied queries that reflect real user behaviour |
-| `sample.json` | Quick sanity checks and smoke tests |
-
----
 
 ## Metrics
 
