@@ -224,6 +224,8 @@ A curated set of questions specifically about CloudCIX — virtual machines, net
 
 A dataset of real opening questions extracted from the [ShareGPT52K](https://huggingface.co/datasets/RyokoAI/ShareGPT52K) dataset — 52K real human-AI conversations collected from ChatGPT users and released under CC0. Using this dataset simulates realistic, unpredictable day-to-day usage rather than a narrow topic pool, which is ideal for soak and stress testing.
 
+---
+
 ## Metrics
 
 | Metric | Description |
@@ -240,6 +242,8 @@ A dataset of real opening questions extracted from the [ShareGPT52K](https://hug
 ---
 
 ## Understanding the Plot
+
+![TTFT Stress Test](examples/ttft_stress.png)
 
 Each run produces a four-panel plot saved to `results/{timestamp}_{preset}/ttft_{preset}.png`.
 
