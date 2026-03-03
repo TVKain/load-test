@@ -118,7 +118,33 @@ make clean
 
 ---
 
-## Adding a New Preset
+## Presets
+
+A preset defines the load profile for a test run — it controls how many virtual users (VUs) are active and for how long. Each preset is a JSON file in the `presets/` folder containing a list of stages. Each stage has a `duration` and a `target` VU count. k6 linearly ramps the VU count from the previous stage's target to the current stage's target over the given duration.
+
+For example, this preset ramps from 0 to 50 VUs over 5 minutes, holds for 1 hour, then ramps back down:
+
+```json
+[
+    { "duration": "5m",  "target": 50 },
+    { "duration": "1h",  "target": 50 },
+    { "duration": "5m",  "target": 0  }
+]
+```
+
+You select a preset at runtime via the `PRESET` variable. The test script reads the corresponding file from `presets/<PRESET>.json` automatically — no code changes needed.
+
+### Built-in Presets
+
+| Preset | Purpose | Shape |
+|---|---|---|
+| `smoke` | Sanity check — verifies the test and API are working | 1 VU for 30s |
+| `breaking` | Finds the point where the server starts failing | Ramp 10→100 VUs, no soak |
+| `soak` | Detects memory leaks and gradual performance degradation | Ramp up to 50 VUs, hold for 8h, ramp down |
+| `spike` | Tests recovery from a sudden burst of traffic | Jump to 100 VUs, drop back to normal |
+| `stress` | Measures how performance degrades as load grows | Slow ramp to 100 VUs |
+
+### Adding a New Preset
 
 1. Create a new file in the `presets/` folder:
 
@@ -126,7 +152,7 @@ make clean
 touch presets/my_preset.json
 ```
 
-2. Define your stages — each stage has a `duration` and a `target` VU count:
+2. Define your stages:
 
 ```json
 [
@@ -207,6 +233,28 @@ python3 scripts/build_cloudcix_questions.py
 
 A dataset of real opening questions extracted from the [ShareGPT52K](https://huggingface.co/datasets/RyokoAI/ShareGPT52K) dataset — 52K real human-AI conversations collected from ChatGPT users and released under CC0. Using this dataset simulates realistic, unpredictable day-to-day usage rather than a narrow topic pool, which is ideal for soak and stress testing.
 
+To generate `questions/sharegpt.json`, download the raw dataset and run the extraction script:
+
+```bash
+# 1. Download the raw dataset
+wget https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json
+
+# 2. Extract the first human turn from each conversation
+python3 scripts/build_sharegpt_questions.py
+
+# 3. Run the test with the extracted questions
+make run PRESET=soak QUESTIONS_FILE=./questions/sharegpt.json
+```
+
+The extraction script pulls the opening human message from each conversation and writes up to 200 questions to `questions/sharegpt.json`. You can adjust the limit inside the script.
+
+**When to use each dataset:**
+
+| Dataset | Best for |
+|---|---|
+| `cloudcix.json` | Domain accuracy testing — does the chatbot answer CloudCIX questions well under load? |
+| `sharegpt.json` | Realistic load simulation — unpredictable, varied queries that reflect real user behaviour |
+| `sample.json` | Quick sanity checks and smoke tests |
 
 ---
 
@@ -227,26 +275,14 @@ A dataset of real opening questions extracted from the [ShareGPT52K](https://hug
 
 ## Understanding the Plot
 
-Each run produces a four-panel plot:
+Each run produces a four-panel plot saved to `results/{timestamp}_{preset}/ttft_{preset}.png`.
 
-- **Panel 1** — TTFT scatter (raw dots) with cumulative p99 trend line and a final p99 reference line
-- **Panel 2** — Cumulative chat requests (total, success, failed) over time
-- **Panel 3** — Cumulative conversation requests (total, success, failed) over time
-- **Panel 4** — Active VU count over time
+- **Panel 1 — TTFT over time** — scatter of raw time-to-first-chunk values (dots) overlaid with a cumulative p99 trend line and a final p99 reference line. A rising p99 line indicates the server is slowing down under load. The title bar shows `min`, `p99`, and `max` across the full run.
+- **Panel 2 — Chat Requests** — bar chart bucketed by time window (5s for short runs, 120s for soak runs) showing successful (green) and failed (red) chat requests. Each bar is labelled with its count. Useful for pinpointing exactly when failures started relative to load.
+- **Panel 3 — Conversation Requests** — same bar chart layout as Panel 2 but for conversation creation events. Since conversations are created once per VU, bars are sparse and concentrated during the ramp-up phase.
+- **Panel 4 — Virtual Users** — filled area chart showing active VU count over time, with a peak annotation marking the highest concurrency reached during the run.
 
-Vertical dashed lines mark stage boundaries so you can correlate exactly when TTFT started degrading with the VU count at that moment. The stats box at the bottom shows `min`, `p99`, and `max` TTFT across the full run.
-
----
-
-## Preset Reference
-
-| Preset | Purpose | When to use |
-|---|---|---|
-| `smoke` | 1 VU, 30s | Verify the test works before a full run |
-| `breaking` | Ramp 10→100 VUs | Find where the server starts failing |
-| `soak` | 50 VUs for 8h | Detect memory leaks or gradual degradation |
-| `spike` | Burst to 100 VUs | Test recovery from sudden traffic surges |
-| `stress` | Gradual ramp to 15 VUs | Understand how performance degrades under load |
+Vertical dashed lines mark stage boundaries across all panels so you can correlate TTFT degradation and failure spikes with the exact moment VU count changed. Stage labels (`VU=N`) appear at the top of Panel 1.
 
 ---
 
