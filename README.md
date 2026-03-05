@@ -1,6 +1,11 @@
-# CloudCIX Chatbot Load Testing
+# CloudCIX Load Testing
 
-A k6-based load testing suite for benchmarking the CloudCIX chatbot API. Measures Time to First Chunk (TTFT) and chunk inter-arrival time under various load profiles, with automatic plot generation.
+A k6-based load testing suite for benchmarking SSE streaming APIs. Includes two test scripts:
+
+1. **Chatbot Test** (`scripts/chatbot/`) — benchmarks the CloudCIX chatbot API (conversation + SSE answer streaming)
+2. **OpenAI Test** (`scripts/openai/`) — benchmarks any OpenAI-compatible `/chat/completions` endpoint (vLLM, llama.cpp, Ollama, etc.)
+
+Both tests measure Time to First Token (TTFT) and chunk inter-arrival time under various load profiles, and share the same presets, questions, and results infrastructure.
 
 ---
 
@@ -18,35 +23,53 @@ pip install pandas matplotlib
 ## Folder Structure
 
 ```
-├── load_test.js          # Main k6 test script
-├── plot.py               # Generates TTFT plot from results
-├── Makefile              # Orchestrates benchmark and plot
-├── .env                  # Symlink to active env file (git ignored)
+├── scripts/
+│   ├── chatbot/
+│   │   ├── test.js           # CloudCIX chatbot test (SSE via xk6-sse)
+│   │   └── plot.py           # 4-panel plot (TTFT, chat, conv, VUs + correlation)
+│   └── openai/
+│       ├── test.js           # OpenAI /chat/completions test
+│       └── plot.py           # 2-panel plot (TTFT + VUs)
+├── Makefile                  # Orchestrates benchmark and plot
+├── .env                      # Symlink to active env file (git ignored)
 ├── .gitignore
-├── envs/                 # Environment configurations
-│   ├── example.env       # Template — copy this to get started
-│   ├── production.env    # Production credentials (git ignored)
-│   ├── staging.env       # Staging credentials (git ignored)
-│   └── dev.env           # Dev credentials (git ignored)
-├── presets/              # Load profile definitions (one file per preset)
-│   ├── smoke.json        # 1 VU, sanity check
-│   ├── breaking.json     # Ramp up until the server breaks (default)
-│   ├── soak.json         # Sustained load to detect degradation over time
-│   ├── spike.json        # Sudden burst then back to normal
-│   └── stress.json       # Gradual increase beyond expected capacity
-├── questions/            # (Optional) Custom question datasets
-│   ├── cloudcix.json     # Broader CloudCIX question set (see docs below)
-│   └── sharegpt.json     # Real-world general questions from ShareGPT (see docs below)
-└── results/              # All benchmark results (git ignored, auto-created)
+├── envs/                     # Environment configurations
+│   ├── example.env           # Chatbot test template
+│   ├── openai_example.env    # OpenAI test template
+│   └── *.env                 # Your env files (git ignored)
+├── presets/                  # Load profile definitions (shared by all tests)
+│   ├── smoke.json            # 1 VU, sanity check
+│   ├── breaking.json         # Ramp up until the server breaks (default)
+│   ├── soak.json             # Sustained load to detect degradation over time
+│   ├── spike.json            # Sudden burst then back to normal
+│   └── stress.json           # Gradual increase beyond expected capacity
+├── questions/                # Question datasets (shared by all tests)
+│   ├── cloudcix.json         # Broader CloudCIX question set
+│   └── sharegpt.json         # Real-world general questions from ShareGPT
+└── results/                  # All benchmark results (git ignored, auto-created)
     └── {timestamp}_{preset}/
-        ├── results.json       # Raw k6 output
-        ├── ttft_{preset}.png  # TTFT plot
-        └── summary.txt        # Full terminal output
+        ├── results.json      # Raw k6 output
+        ├── ttft_{preset}.png # TTFT plot
+        └── summary.txt       # Full terminal output
 ```
+
+### Adding a New Test
+
+To add a new test type, create a new folder under `scripts/` with `test.js` and `plot.py`:
+
+```bash
+mkdir scripts/my_test
+# Add scripts/my_test/test.js and scripts/my_test/plot.py
+make run SCRIPT=my_test PRESET=smoke QUESTIONS_FILE=cloudcix
+```
+
+No changes needed to the `Makefile`.
 
 ---
 
 ## Getting Started
+
+### Chatbot Test
 
 ```bash
 # 1. Copy the example env and fill in your credentials
@@ -63,6 +86,23 @@ make smoke
 make breaking
 ```
 
+### OpenAI Test
+
+```bash
+# 1. Copy the template and fill in your server details
+cp envs/openai_example.env envs/my_server.env
+vim envs/my_server.env
+
+# 2. Switch to your environment
+make env ENV=my_server
+
+# 3. Run a smoke test
+make run SCRIPT=openai PRESET=smoke QUESTIONS_FILE=cloudcix
+
+# 4. Run a full breaking point test
+make run SCRIPT=openai PRESET=breaking QUESTIONS_FILE=sharegpt
+```
+
 ---
 
 ## Switching Environments
@@ -76,9 +116,6 @@ make env ENV=staging
 # Switch to production
 make env ENV=production
 
-# Switch to dev
-make env ENV=dev
-
 # See which environment is active
 make env-show
 ```
@@ -87,29 +124,32 @@ make env-show
 
 ## How to Run
 
-```bash
-# Run with the default preset (breaking)
-make
+The `SCRIPT` variable selects which test to run. It defaults to `chatbot`.
 
-# Run a specific preset
+```bash
+# Chatbot test (default)
+make run
+make run SCRIPT=chatbot
+
+# OpenAI test
+make run SCRIPT=openai
+
+# With preset and questions
+make run SCRIPT=openai PRESET=stress QUESTIONS_FILE=sharegpt
+
+# Preset shortcuts (use default SCRIPT)
 make smoke
 make breaking
 make soak
 make spike
 make stress
 
-# Override preset without changing .env
-make run PRESET=spike
-
-# Run with a custom questions dataset
-make run PRESET=soak QUESTIONS_FILE=./questions/cloudcix.json
-make run PRESET=soak QUESTIONS_FILE=./questions/sharegpt.json
-
 # List all past runs
 make list
 
-# Replot an existing run without re-running the test
-python3 plot.py results/2026-03-03_14-22-01_breaking/results.json breaking
+# Replot an existing run
+python3 scripts/chatbot/plot.py results/2026-03-03_14-22-01_breaking/results.json breaking
+python3 scripts/openai/plot.py results/2026-03-05_16-03-59_smoke/results.json smoke
 
 # Clean all results
 make clean
@@ -168,7 +208,7 @@ touch presets/my_preset.json
 make run PRESET=my_preset
 ```
 
-No changes needed to `load_test.js`, `plot.py`, or the `Makefile`.
+No changes needed to test scripts, plot scripts, or the `Makefile`.
 
 ---
 
@@ -207,10 +247,10 @@ To use your own questions, create a JSON file containing a flat array of strings
 Then pass it in at runtime:
 
 ```bash
-make run PRESET=soak QUESTIONS_FILE=./questions/my_questions.json
+make run PRESET=soak QUESTIONS_FILE=my_questions
 ```
 
-The file path is relative to the project root. The test will log how many questions were loaded at startup so you can confirm it picked up the right file.
+The test will log how many questions were loaded at startup so you can confirm it picked up the right file.
 
 ### Included Datasets
 
@@ -227,6 +267,8 @@ A dataset of real opening questions extracted from the [ShareGPT52K](https://hug
 
 ## Metrics
 
+### Chatbot Test Metrics
+
 | Metric | Description |
 |---|---|
 | `ttft_ms` | Time from request start to first chunk received (ms) |
@@ -238,12 +280,25 @@ A dataset of real opening questions extracted from the [ShareGPT52K](https://hug
 | `conv_success` | Successful conversation creations |
 | `conv_failed` | Failed conversation creations |
 
+### OpenAI Test Metrics
+
+| Metric | Description |
+|---|---|
+| `ttft_ms` | Time from request start to first content token (ms) |
+| `chunk_inter_arrival_ms` | Time between consecutive content chunks (ms) |
+| `tokens_per_request` | Number of content chunks (≈ tokens) per request |
+| `total_duration_ms` | Total request duration including streaming (ms) |
+| `chat_total` | Total chat requests attempted |
+| `chat_success` | Chat requests that completed with content |
+| `chat_failed` | Chat requests that failed |
+
 ---
 
-## Understanding the Plot
+## Understanding the Plots
 
+### Chatbot Plot (4-panel)
 
-Each run produces a four-panel plot saved to `results/{timestamp}_{preset}/ttft_{preset}.png`.
+Each chatbot run produces a four-panel plot saved to `results/{timestamp}_{preset}/ttft_{preset}.png`.
 
 Example output:
 ![TTFT Stress Test](examples/ttft_stress.png)
@@ -255,11 +310,20 @@ Example output:
 
 Vertical dashed lines mark stage boundaries across all panels so you can correlate TTFT degradation and failure spikes with the exact moment VU count changed. Stage labels (`VU=N`) appear at the top of Panel 1.
 
+### OpenAI Plot (2-panel)
+
+Each OpenAI run produces a two-panel plot:
+
+- **Panel 1 — TTFT over time** — same as chatbot plot: scatter, cumulative p99 trend, and final p99 line.
+- **Panel 2 — Virtual Users** — active VU count over time with peak annotation.
+
 ---
 
 ## Environment Variables
 
 All variables are set via the active `.env` file. Use `make env ENV=<name>` to switch.
+
+### Chatbot Test
 
 | Variable | Default | Description |
 |---|---|---|
@@ -270,4 +334,15 @@ All variables are set via the active `.env` file. Use `make env ENV=<name>` to s
 | `CHATBOT_NAME` | `Guiden` | Name of the chatbot to test |
 | `FIRST_CHUNK_TIMEOUT_MS` | `300000` | Max time to wait for first chunk (ms) |
 | `PRESET` | `breaking` | Load profile preset to use |
-| `QUESTIONS_FILE` | _(unset)_ | Path to a custom JSON questions dataset |
+| `QUESTIONS_FILE` | _(unset)_ | Questions dataset name (e.g. `cloudcix`, `sharegpt`) |
+
+### OpenAI Test
+
+| Variable | Default | Description |
+|---|---|---|
+| `OPENAI_BASE_URL` | — | Server base URL (e.g. `http://localhost:8000/v1`) |
+| `OPENAI_API_KEY` | — | API key / Bearer token |
+| `OPENAI_MODEL` | — | Model name to request |
+| `FIRST_CHUNK_TIMEOUT_MS` | `300000` | Max time to wait for first chunk (ms) |
+| `PRESET` | `breaking` | Load profile preset |
+| `QUESTIONS_FILE` | _(unset)_ | Questions dataset name (e.g. `cloudcix`, `sharegpt`) |

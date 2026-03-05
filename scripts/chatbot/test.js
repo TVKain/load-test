@@ -28,7 +28,7 @@ const PRESET = __ENV.PRESET || 'breaking';
 let STAGES;
 
 try {
-    STAGES = JSON.parse(open(`./presets/${PRESET}.json`));
+    STAGES = JSON.parse(open(`../../presets/${PRESET}.json`));
 } catch (e) {
     throw new Error(`Unknown preset "${PRESET}" — make sure presets/${PRESET}.json exists`);
 }
@@ -41,7 +41,7 @@ if (!QUESTIONS_FILE) {
     throw new Error('QUESTIONS_FILE is required — e.g. make run PRESET=soak QUESTIONS_FILE=sample');
 }
 
-const QUESTIONS_PATH = `./questions/${QUESTIONS_FILE}.json`;
+const QUESTIONS_PATH = `../../questions/${QUESTIONS_FILE}.json`;
 let QUESTIONS;
 
 try {
@@ -302,6 +302,15 @@ export function handleSummary(data) {
     const ttft = data.metrics.ttft_ms;
     const iat = data.metrics.chunk_inter_arrival_ms;
 
+    const fmt = (metric, key) => {
+        try {
+            const v = metric && metric.values && metric.values[key];
+            return (v !== undefined && v !== null) ? v.toFixed(2) : 'N/A';
+        } catch (_) {
+            return 'N/A';
+        }
+    };
+
     const summary = `
 ─── Benchmark Summary ──────────────────────────
   Chatbot:     ${CHATBOT_NAME}
@@ -319,14 +328,14 @@ export function handleSummary(data) {
     Interrupted: ${interrupted}
 
   TTFT
-    min:         ${ttft ? (ttft.values.min).toFixed(2) : 'N/A'}ms
-    p(99):       ${ttft ? (ttft.values['p(99)']).toFixed(2) : 'N/A'}ms
-    max:         ${ttft ? (ttft.values.max).toFixed(2) : 'N/A'}ms
+    min:         ${fmt(ttft, 'min')}ms
+    p(99):       ${fmt(ttft, 'p(99)')}ms
+    max:         ${fmt(ttft, 'max')}ms
 
   Chunk Inter-Arrival
-    min:         ${iat ? (iat.values.min).toFixed(2) : 'N/A'}ms
-    p(99):       ${iat ? (iat.values['p(99)']).toFixed(2) : 'N/A'}ms
-    max:         ${iat ? (iat.values.max).toFixed(2) : 'N/A'}ms
+    min:         ${fmt(iat, 'min')}ms
+    p(99):       ${fmt(iat, 'p(99)')}ms
+    max:         ${fmt(iat, 'max')}ms
 ────────────────────────────────────────────────
 `;
 

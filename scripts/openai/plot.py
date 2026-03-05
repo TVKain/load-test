@@ -1,7 +1,6 @@
 import json
 import os
 import matplotlib.ticker as ticker
-import matplotlib.patches as mpatches
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -10,7 +9,9 @@ import sys
 RESULTS_FILE = sys.argv[1] if len(sys.argv) > 1 else 'results.json'
 PRESET       = sys.argv[2] if len(sys.argv) > 2 else 'breaking'
 OUTPUT_FILE  = sys.argv[3] if len(sys.argv) > 3 else f'ttft_{PRESET}.png'
-PRESET_FILE  = os.path.join('presets', f'{PRESET}.json')
+SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..'))
+PRESET_FILE  = os.path.join(PROJECT_ROOT, 'presets', f'{PRESET}.json')
 
 # Global style
 plt.rcParams.update({
@@ -24,8 +25,6 @@ plt.rcParams.update({
 })
 
 COLORS = {
-    'success': '#2ecc71',
-    'failed':  '#e74c3c',
     'ttft':    '#5b9bd5',
     'p99':     '#f39c12',
     'p99line': '#e74c3c',
@@ -60,12 +59,8 @@ else:
 # =============================================================================
 # Parse results.json
 # =============================================================================
-ttft_rows         = []
-vu_rows           = []
-chat_success_rows = []
-chat_failed_rows  = []
-conv_success_rows = []
-conv_failed_rows  = []
+ttft_rows = []
+vu_rows   = []
 
 print(f'Reading {RESULTS_FILE}...')
 with open(RESULTS_FILE) as f:
@@ -87,17 +82,9 @@ with open(RESULTS_FILE) as f:
             ttft_rows.append({'time': t, 'ttft': v})
         elif metric == 'vus':
             vu_rows.append({'time': t, 'vus': v})
-        elif metric == 'chat_success':
-            chat_success_rows.append({'time': t, 'value': v})
-        elif metric == 'chat_failed':
-            chat_failed_rows.append({'time': t, 'value': v})
-        elif metric == 'conv_success':
-            conv_success_rows.append({'time': t, 'value': v})
-        elif metric == 'conv_failed':
-            conv_failed_rows.append({'time': t, 'value': v})
 
 if not ttft_rows:
-    print('No ttft_ms data found. Make sure you ran: k6 run --out json=results.json load_test.js')
+    print('No ttft_ms data found. Make sure you ran: k6 run --out json=results.json scripts/openai/test.js')
     sys.exit(1)
 
 # =============================================================================
@@ -156,7 +143,6 @@ def draw_stage_boundaries(axes):
     for t, label in stage_boundaries:
         for ax in axes:
             ax.axvline(x=t, color='#aaaaaa', linestyle='--', alpha=0.6, linewidth=0.8)
-        # Only label on the top panel, above the plot area
         axes[0].annotate(
             label,
             xy=(t, 1), xycoords=('data', 'axes fraction'),
@@ -164,85 +150,24 @@ def draw_stage_boundaries(axes):
             fontsize=7, color='#888888', va='top', ha='left',
         )
 
-def build_rate(rows, col, bucket_secs):
-    if not rows:
-        return pd.DataFrame(columns=['elapsed', col])
-    df = pd.DataFrame(rows)
-    df['time'] = pd.to_datetime(df['time'])
-    df = df.sort_values('time')
-    df['elapsed'] = (df['time'] - t_origin).dt.total_seconds()
-    df['bucket'] = (df['elapsed'] // bucket_secs) * bucket_secs
-    rate = df.groupby('bucket')['value'].sum().reset_index()
-    rate.columns = ['elapsed', col]
-    return rate
-
-def bar_with_labels(ax, rate_df, col, color, alpha, width):
-    if rate_df.empty:
-        return
-    bars = ax.bar(
-        rate_df['elapsed'], rate_df[col],
-        width=width, align='edge',
-        color=color, alpha=alpha,
-        linewidth=0.4, edgecolor='white',
-    )
-    for bar in bars:
-        h = bar.get_height()
-        if h > 0:
-            ax.text(
-                bar.get_x() + bar.get_width() / 2, h + 0.02,
-                str(int(h)), ha='center', va='bottom',
-                fontsize=7.5, color='#444444', fontweight='bold',
-            )
-
-def plot_requests(ax, success_rows, failed_rows, title):
-    bucket = 120 if total_secs > 3600 else 5
-    width  = bucket * 0.75
-
-    success_rate = build_rate(success_rows, 'success', bucket)
-    failed_rate  = build_rate(failed_rows,  'failed',  bucket)
-
-    n_success = int(sum(r['value'] for r in success_rows)) if success_rows else 0
-    n_failed  = int(sum(r['value'] for r in failed_rows))  if failed_rows  else 0
-
-    bar_with_labels(ax, success_rate, 'success', COLORS['success'], 0.75, width)
-    bar_with_labels(ax, failed_rate,  'failed',  COLORS['failed'],  0.85, width)
-
-    ax.set_title(f'{title}  ·  {bucket}s buckets', fontsize=10, fontweight='bold',
-                 loc='left', pad=6, color='#333333')
-    ax.set_ylabel('Requests', fontsize=9)
-    ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-    ax.grid(True, axis='y')
-
-    # Headroom for labels
-    ymax = ax.get_ylim()[1]
-    ax.set_ylim(0, ymax * 1.25)
-
-    # Legend as patches
-    legend_handles = [
-        mpatches.Patch(color=COLORS['success'], alpha=0.75, label=f'Success  {n_success}'),
-    ]
-    if n_failed > 0:
-        legend_handles.append(mpatches.Patch(color=COLORS['failed'], alpha=0.85, label=f'Failed  {n_failed}'))
-    ax.legend(handles=legend_handles, loc='upper left', fontsize=8.5,
-              framealpha=0.9, edgecolor='#dddddd')
-
 # =============================================================================
-# Figure
+# Figure — 2 panels: TTFT + Virtual Users
 # =============================================================================
-fig = plt.figure(figsize=(15, 14), constrained_layout=False)
+fig = plt.figure(figsize=(16, 8), constrained_layout=False)
 fig.patch.set_facecolor('#ffffff')
 
 gs = gridspec.GridSpec(
-    4, 1,
-    height_ratios=[3, 2, 2, 1],
-    hspace=0.52,
-    top=0.91, bottom=0.07, left=0.08, right=0.97,
+    2, 1,
+    height_ratios=[3, 1],
+    left=0.08, right=0.95,
+    top=0.88, bottom=0.10,
+    hspace=0.45,
 )
 
 # Title + stats badge
-fig.text(0.5, 0.975, f'Chatbot Load Test  [{PRESET.upper()}]',
+fig.text(0.5, 0.975, f'OpenAI Load Test  [{PRESET.upper()}]',
          ha='center', va='top', fontsize=14, fontweight='bold', color='#222222')
-fig.text(0.5, 0.955,
+fig.text(0.5, 0.945,
          f'min {pmin:.2f}s   ·   p99 {p99_final:.2f}s   ·   max {pmax:.2f}s',
          ha='center', va='top', fontsize=9.5, color='#555555',
          bbox=dict(boxstyle='round,pad=0.45', facecolor='#fff9e6',
@@ -258,47 +183,44 @@ ax1.plot(ttft_df['elapsed'], ttft_df['cumulative_p99'],
 ax1.axhline(y=p99_final, color=COLORS['p99line'], linestyle='--', linewidth=1.4,
             zorder=5, label=f'p99 final = {p99_final:.2f}s')
 
-ax1.set_ylabel('Time to First Chunk (s)', fontsize=10)
+ax1.set_ylabel('Time to First Token (s)', fontsize=10)
 ax1.set_title('TTFT over time', fontsize=10, fontweight='bold',
               loc='left', pad=6, color='#333333')
 ax1.legend(loc='upper left', fontsize=8.5, framealpha=0.9, edgecolor='#dddddd')
 ax1.grid(True)
 ax1.set_xticklabels([])
 
-# ── Panel 2: Chat requests ───────────────────────────────────────────────────
+# ── Panel 2: VU count ────────────────────────────────────────────────────────
 ax2 = fig.add_subplot(gs[1], sharex=ax1)
-plot_requests(ax2, chat_success_rows, chat_failed_rows, 'Chat Requests')
-ax2.set_xticklabels([])
-
-# ── Panel 3: Conversation requests ──────────────────────────────────────────
-ax3 = fig.add_subplot(gs[2], sharex=ax1)
-plot_requests(ax3, conv_success_rows, conv_failed_rows, 'Conversation Requests')
-ax3.set_xticklabels([])
-
-# ── Panel 4: VU count ────────────────────────────────────────────────────────
-ax4 = fig.add_subplot(gs[3], sharex=ax1)
 if not vu_df.empty:
-    ax4.fill_between(vu_df['elapsed'], vu_df['vus'],
+    ax2.fill_between(vu_df['elapsed'], vu_df['vus'],
                      alpha=0.35, color=COLORS['vu'])
-    ax4.plot(vu_df['elapsed'], vu_df['vus'],
+    ax2.plot(vu_df['elapsed'], vu_df['vus'],
              color='#d68910', linewidth=1.8)
-ax4.set_ylabel('Active VUs', fontsize=9)
-ax4.set_title('Virtual Users', fontsize=10, fontweight='bold',
+ax2.set_ylabel('Active VUs', fontsize=9)
+ax2.set_title('Virtual Users', fontsize=10, fontweight='bold',
               loc='left', pad=6, color='#333333')
-ax4.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-ax4.grid(True)
+ax2.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+ax2.grid(True)
 
 # Annotate peak VU count
 if not vu_df.empty:
     peak_vus = int(vu_df['vus'].max())
     peak_t   = vu_df.loc[vu_df['vus'].idxmax(), 'elapsed']
-    ax4.set_ylim(0, peak_vus * 1.35)
+    ax2.annotate(
+        f'peak {peak_vus} VUs',
+        xy=(peak_t, peak_vus),
+        xytext=(peak_t + total_secs * 0.02, peak_vus * 0.8),
+        fontsize=8, color='#d68910', fontweight='bold',
+        arrowprops=dict(arrowstyle='->', color='#d68910', lw=1.2),
+    )
+    ax2.set_ylim(0, peak_vus * 1.35)
 
-apply_xaxis(ax4)
+apply_xaxis(ax2)
 
 # ── Stage boundaries ─────────────────────────────────────────────────────────
-draw_stage_boundaries([ax1, ax2, ax3, ax4])
+draw_stage_boundaries([ax1, ax2])
 
 plt.savefig(OUTPUT_FILE, dpi=150, bbox_inches='tight')
 print(f'Saved {OUTPUT_FILE}')
-plt.show()/pea
+plt.show()

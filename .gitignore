@@ -220,3 +220,4 @@ results/
 .env
 envs/*.env
 !envs/example.env
+!envs/openai_example.env

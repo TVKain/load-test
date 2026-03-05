@@ -9,12 +9,32 @@ endif
 # =============================================================================
 # Configuration — defaults applied AFTER .env so .env values win
 # =============================================================================
+SCRIPT         ?= chatbot
 PRESET         ?= breaking
 QUESTIONS_FILE ?=
 TIMESTAMP      := $(shell date +%Y-%m-%d_%H-%M-%S)
 RUN_DIR        := results/$(TIMESTAMP)_$(PRESET)
 OUT            := $(RUN_DIR)/results.json
 PLOT           := $(RUN_DIR)/ttft_$(PRESET).png
+
+# Derived paths
+TEST_JS  := scripts/$(SCRIPT)/test.js
+PLOT_PY  := scripts/$(SCRIPT)/plot.py
+
+# Build the k6 -e flags based on which script is being run
+ifeq ($(findstring openai,$(SCRIPT)),openai)
+    K6_ENV_FLAGS = \
+        -e OPENAI_BASE_URL=$(OPENAI_BASE_URL) \
+        -e OPENAI_API_KEY=$(OPENAI_API_KEY) \
+        -e OPENAI_MODEL=$(OPENAI_MODEL)
+else
+    K6_ENV_FLAGS = \
+        -e CLOUDCIX_API_BASE=$(CLOUDCIX_API_BASE) \
+        -e CLOUDCIX_API_USERNAME=$(CLOUDCIX_API_USERNAME) \
+        -e CLOUDCIX_API_PASSWORD=$(CLOUDCIX_API_PASSWORD) \
+        -e CLOUDCIX_API_KEY=$(CLOUDCIX_API_KEY) \
+        -e CHATBOT_NAME=$(CHATBOT_NAME)
+endif
 
 # =============================================================================
 # Targets
@@ -29,18 +49,14 @@ $(RUN_DIR):
 run: $(RUN_DIR)
 	k6 run \
 		--out json=$(OUT) \
-		-e CLOUDCIX_API_BASE=$(CLOUDCIX_API_BASE) \
-		-e CLOUDCIX_API_USERNAME=$(CLOUDCIX_API_USERNAME) \
-		-e CLOUDCIX_API_PASSWORD=$(CLOUDCIX_API_PASSWORD) \
-		-e CLOUDCIX_API_KEY=$(CLOUDCIX_API_KEY) \
-		-e CHATBOT_NAME=$(CHATBOT_NAME) \
+		$(K6_ENV_FLAGS) \
 		-e FIRST_CHUNK_TIMEOUT_MS=$(FIRST_CHUNK_TIMEOUT_MS) \
 		-e PRESET=$(PRESET) \
 		$(if $(QUESTIONS_FILE),-e QUESTIONS_FILE=$(QUESTIONS_FILE),) \
-		load_test.js 2>&1 | tee $(RUN_DIR)/summary.txt
+		$(TEST_JS) 2>&1 | tee $(RUN_DIR)/summary.txt
 
 plot:
-	python3 plot.py $(OUT) $(PRESET) $(PLOT)
+	python3 $(PLOT_PY) $(OUT) $(PRESET) $(PLOT)
 
 # List all past runs
 list:
