@@ -20,6 +20,7 @@ PLOT           := $(RUN_DIR)/ttft_$(PRESET).png
 # Derived paths
 TEST_JS  := scripts/$(SCRIPT)/test.js
 PLOT_PY  := scripts/$(SCRIPT)/plot.py
+PYTHON   := $(if $(wildcard venv/bin/python3),venv/bin/python3,$(if $(wildcard venv/bin/python),venv/bin/python,python3))
 
 # Build the k6 -e flags based on which script is being run
 ifeq ($(findstring openai,$(SCRIPT)),openai)
@@ -47,6 +48,7 @@ $(RUN_DIR):
 	mkdir -p $(RUN_DIR)
 
 run: $(RUN_DIR)
+	echo "$(SCRIPT)" > $(RUN_DIR)/.script_type
 	k6 run \
 		--out json=$(OUT) \
 		$(K6_ENV_FLAGS) \
@@ -56,7 +58,23 @@ run: $(RUN_DIR)
 		$(TEST_JS) 2>&1 | tee $(RUN_DIR)/summary.txt
 
 plot:
-	python3 $(PLOT_PY) $(OUT) $(PRESET) $(PLOT)
+	@if [ -f "$(OUT)" ]; then \
+		$(PYTHON) $(PLOT_PY) "$(OUT)" "$(PRESET)" "$(PLOT)"; \
+	else \
+		LATEST=$$(ls -td results/*_$(PRESET) 2>/dev/null | head -n 1); \
+		if [ -n "$$LATEST" ] && [ -f "$$LATEST/results.json" ]; then \
+			echo "Using latest run: $$LATEST"; \
+			if [ -f "$$LATEST/.script_type" ]; then \
+				TYPE=$$(cat "$$LATEST/.script_type"); \
+				echo "Detected test type $$TYPE, plotting..."; \
+				$(PYTHON) "scripts/$$TYPE/plot.py" "$$LATEST/results.json" "$(PRESET)" "$$LATEST/ttft_$(PRESET).png"; \
+			else \
+				$(PYTHON) $(PLOT_PY) "$$LATEST/results.json" "$(PRESET)" "$$LATEST/ttft_$(PRESET).png"; \
+			fi; \
+		else \
+			echo "Error: No results found to plot."; exit 1; \
+		fi; \
+	fi
 
 # List all past runs
 list:
@@ -79,6 +97,12 @@ env-show:
 
 clean:
 	rm -rf results/
+
+# Virtual Environment
+venv:
+	python3 -m venv venv
+	venv/bin/pip install pandas matplotlib
+	@echo "Virtual environment created and dependencies installed. Run 'source venv/bin/activate' to use it manually."
 
 # Preset shortcuts
 smoke:

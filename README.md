@@ -12,15 +12,21 @@ Both tests measure Time to First Token (TTFT) and chunk inter-arrival time under
 ## Requirements
 
 - [k6](https://k6.io/docs/getting-started/installation/) with the [xk6-sse](https://github.com/phymbert/xk6-sse) extension
-- Python 3 with `pandas` and `matplotlib`
+- Python 3 (`make venv` will install `pandas` and `matplotlib` automatically)
 
 ```bash
-pip install pandas matplotlib
+make venv
 ```
 
 ---
 
 ## Folder Structure
+
+The project is structured around **Separation of Concerns and Reusability**:
+
+1. **Isolated Test Scripts**: Each API target (chatbot, openai) gets its own dedicated folder under `scripts/`. This keeps target-specific logic—the k6 test and the Python plot script—tightly coupled to each other but completely isolated from other API targets.
+2. **Shared Testing Assets**: Data assets that define the tests (like load `presets/`, `questions/`, and configurations `envs/`) are kept at the root. This guarantees that when comparing different APIs, they are subjected to the exact same load profiles and questions. 
+3. **Zero-Boilerplate Extensibility**: Adding a new test target only involves creating a new folder with `test.js` and `plot.py`, instantly hooking into the existing Makefile, presets, and questions system.
 
 ```
 ├── scripts/
@@ -79,10 +85,13 @@ vim envs/production.env
 # 2. Switch to your environment
 make env ENV=production
 
-# 3. Run a smoke test to verify everything works
+# 3. Setup Python virtual environment for plotting (only needed once)
+make venv
+
+# 4. Run a smoke test to verify everything works
 make smoke
 
-# 4. Run a full breaking point test
+# 5. Run a full breaking point test
 make breaking
 ```
 
@@ -96,10 +105,13 @@ vim envs/my_server.env
 # 2. Switch to your environment
 make env ENV=my_server
 
-# 3. Run a smoke test
+# 3. Setup Python virtual environment for plotting (only needed once)
+make venv
+
+# 4. Run a smoke test
 make run SCRIPT=openai PRESET=smoke QUESTIONS_FILE=cloudcix
 
-# 4. Run a full breaking point test
+# 5. Run a full breaking point test
 make run SCRIPT=openai PRESET=breaking QUESTIONS_FILE=sharegpt
 ```
 
