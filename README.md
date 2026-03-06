@@ -264,6 +264,47 @@ make run PRESET=soak QUESTIONS_FILE=my_questions
 
 The test will log how many questions were loaded at startup so you can confirm it picked up the right file.
 
+### OpenAI: Use Llama/Mistral Tokenizers (Hugging Face)
+
+If you need exact token counts using model tokenizers (for example Llama 3 or Mistral Large 3), generate a dataset file first with the helper script, then run the OpenAI test with `QUESTIONS_FILE`.
+
+1. Install tokenizer dependencies:
+
+```bash
+pip install -r requirements-hf.txt
+```
+
+2. Generate a dataset with exact token counts using the model tokenizer:
+
+```bash
+python3 scripts/openai/generate_questions_hf.py \
+    --model-id mistralai/Mistral-Large-3-675B-Instruct-2512 \
+    --fix-mistral-regex \
+    --output-file questions/mistral_large3_256t.json \
+    --dataset-size 200 \
+    --tokens-per-prompt 256 \
+    --seed 1337
+```
+
+3. Run the benchmark against that dataset:
+
+```bash
+make run SCRIPT=openai PRESET=smoke QUESTIONS_FILE=mistral_large3_256t
+```
+
+4. Inspect token length per entry in any questions file:
+
+```bash
+python3 scripts/openai/token_lengths.py \
+    --questions-file questions/mistral_large3_256t.json \
+    --tokenizer hf \
+    --model-id mistralai/Mistral-Large-3-675B-Instruct-2512 \
+    --fix-mistral-regex
+```
+
+You can swap `--model-id` for any Hugging Face tokenizer id, such as a Llama 3 tokenizer.
+The generator auto-enables `fix_mistral_regex` for `mistralai/*` model ids (or you can pass `--fix-mistral-regex` explicitly).
+
 ### Included Datasets
 
 #### `questions/cloudcix.json` — CloudCIX Domain Questions
@@ -355,6 +396,11 @@ All variables are set via the active `.env` file. Use `make env ENV=<name>` to s
 | `OPENAI_BASE_URL` | — | Server base URL (e.g. `http://localhost:8000/v1`) |
 | `OPENAI_API_KEY` | — | API key / Bearer token |
 | `OPENAI_MODEL` | — | Model name to request |
+| `OPENAI_TEMPERATURE` | `0` | Sampling temperature; keep `0` for least variability |
+| `OPENAI_TOP_P` | `1` | Nucleus sampling parameter; keep `1` for deterministic-style sampling with `temperature=0` |
+| `OPENAI_SEED` | _(unset)_ | Optional fixed seed for reproducible outputs (backend must support `seed`) |
+| `OPENAI_SLEEP_MIN` | `0.5` | Minimum sleep time (seconds) between VU iterations; set both to `0` to skip sleep entirely |
+| `OPENAI_SLEEP_MAX` | `2.5` | Maximum sleep time (seconds) between VU iterations; set both to `0` to skip sleep entirely |
 | `FIRST_CHUNK_TIMEOUT_MS` | `300000` | Max time to wait for first chunk (ms) |
 | `PRESET` | `breaking` | Load profile preset |
 | `QUESTIONS_FILE` | _(unset)_ | Questions dataset name (e.g. `cloudcix`, `sharegpt`) |

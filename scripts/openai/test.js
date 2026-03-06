@@ -8,10 +8,36 @@ import { Counter, Trend } from 'k6/metrics';
 const OPENAI_BASE_URL = __ENV.OPENAI_BASE_URL;
 const OPENAI_API_KEY = __ENV.OPENAI_API_KEY;
 const OPENAI_MODEL = __ENV.OPENAI_MODEL;
+const OPENAI_TEMPERATURE = parseFloat(__ENV.OPENAI_TEMPERATURE || '0');
+const OPENAI_TOP_P = parseFloat(__ENV.OPENAI_TOP_P || '1');
+const OPENAI_SEED_RAW = __ENV.OPENAI_SEED;
+const OPENAI_SEED = OPENAI_SEED_RAW !== undefined && OPENAI_SEED_RAW !== ''
+    ? parseInt(OPENAI_SEED_RAW, 10)
+    : null;
+const OPENAI_SLEEP_MIN = parseFloat(__ENV.OPENAI_SLEEP_MIN || '0.5');
+const OPENAI_SLEEP_MAX = parseFloat(__ENV.OPENAI_SLEEP_MAX || '2.5');
 
 if (!OPENAI_BASE_URL) throw new Error('OPENAI_BASE_URL is required (e.g. http://localhost:8000/v1)');
 if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is required');
 if (!OPENAI_MODEL) throw new Error('OPENAI_MODEL is required');
+if (Number.isNaN(OPENAI_TEMPERATURE) || OPENAI_TEMPERATURE < 0 || OPENAI_TEMPERATURE > 2) {
+    throw new Error('OPENAI_TEMPERATURE must be a number between 0 and 2');
+}
+if (Number.isNaN(OPENAI_TOP_P) || OPENAI_TOP_P <= 0 || OPENAI_TOP_P > 1) {
+    throw new Error('OPENAI_TOP_P must be a number > 0 and <= 1');
+}
+if (OPENAI_SEED_RAW !== undefined && OPENAI_SEED_RAW !== '' && Number.isNaN(OPENAI_SEED)) {
+    throw new Error('OPENAI_SEED must be an integer when provided');
+}
+if (Number.isNaN(OPENAI_SLEEP_MIN) || OPENAI_SLEEP_MIN < 0) {
+    throw new Error('OPENAI_SLEEP_MIN must be a non-negative number');
+}
+if (Number.isNaN(OPENAI_SLEEP_MAX) || OPENAI_SLEEP_MAX < 0) {
+    throw new Error('OPENAI_SLEEP_MAX must be a non-negative number');
+}
+if (OPENAI_SLEEP_MIN > OPENAI_SLEEP_MAX) {
+    throw new Error('OPENAI_SLEEP_MIN must be <= OPENAI_SLEEP_MAX');
+}
 
 const FIRST_CHUNK_TIMEOUT_MS = parseInt(__ENV.FIRST_CHUNK_TIMEOUT_MS || '300000');
 const COMPLETIONS_URL = `${OPENAI_BASE_URL.replace(/\/+$/, '')}/chat/completions`;
@@ -35,7 +61,6 @@ if (!QUESTIONS_FILE) {
 
 const QUESTIONS_PATH = `../../questions/${QUESTIONS_FILE}.json`;
 let QUESTIONS;
-
 try {
     QUESTIONS = JSON.parse(open(QUESTIONS_PATH));
     if (!Array.isArray(QUESTIONS) || QUESTIONS.length === 0) {
@@ -89,6 +114,8 @@ export function setup() {
     console.log(`Model: ${OPENAI_MODEL}`);
     console.log(`Completions URL: ${COMPLETIONS_URL}`);
     console.log(`First chunk timeout: ${FIRST_CHUNK_TIMEOUT_MS}ms`);
+    console.log(`Sampling: temperature=${OPENAI_TEMPERATURE}, top_p=${OPENAI_TOP_P}${OPENAI_SEED !== null ? `, seed=${OPENAI_SEED}` : ''}`);
+    console.log(`Sleep between iterations: ${OPENAI_SLEEP_MIN}–${OPENAI_SLEEP_MAX}s`);
     console.log(`Stages: ${JSON.stringify(STAGES)}`);
     console.log(`Questions pool: ${QUESTIONS.length} questions from ${QUESTIONS_PATH}`);
     return {};
@@ -113,11 +140,18 @@ export default function () {
         : question;
     console.log(`[VU ${__VU}] ⏳ Waiting for first chunk... (question: "${questionPreview}")`);
 
-    const payload = JSON.stringify({
+    const requestBody = {
         model: OPENAI_MODEL,
         messages: [{ role: 'user', content: question }],
+        temperature: OPENAI_TEMPERATURE,
+        top_p: OPENAI_TOP_P,
+        n: 1,
         stream: true,
-    });
+    };
+    if (OPENAI_SEED !== null) {
+        requestBody.seed = OPENAI_SEED;
+    }
+    const payload = JSON.stringify(requestBody);
 
     const res = sse.open(
         COMPLETIONS_URL,
@@ -218,7 +252,9 @@ export default function () {
         }
     }
 
-    sleep(Math.random() * 2 + 0.5);
+    if (OPENAI_SLEEP_MAX > 0) {
+        sleep(Math.random() * (OPENAI_SLEEP_MAX - OPENAI_SLEEP_MIN) + OPENAI_SLEEP_MIN);
+    }
 }
 
 // =============================================================================

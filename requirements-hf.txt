@@ -1,0 +1,8 @@
+# Optional dependencies for Hugging Face tokenizer tools
+# (generate_questions_hf.py and token_lengths.py)
+#
+# Install with: pip install -r requirements-hf.txt
+
+protobuf>=3.20.0
+transformers>=4.36.0
+sentencepiece>=0.1.99tqdm>=4.60.0
