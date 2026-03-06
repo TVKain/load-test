@@ -28,9 +28,9 @@ const PRESET = __ENV.PRESET || 'breaking';
 let STAGES;
 
 try {
-    STAGES = JSON.parse(open(`../../presets/${PRESET}.json`));
+    STAGES = JSON.parse(open(`../shared/presets/${PRESET}.json`));
 } catch (e) {
-    throw new Error(`Unknown preset "${PRESET}" — make sure presets/${PRESET}.json exists`);
+    throw new Error(`Unknown preset "${PRESET}" — make sure shared/presets/${PRESET}.json exists`);
 }
 
 // =============================================================================
@@ -41,7 +41,7 @@ if (!QUESTIONS_FILE) {
     throw new Error('QUESTIONS_FILE is required — e.g. make run PRESET=soak QUESTIONS_FILE=sample');
 }
 
-const QUESTIONS_PATH = `../../questions/${QUESTIONS_FILE}.json`;
+const QUESTIONS_PATH = `questions/${QUESTIONS_FILE}.json`;
 let QUESTIONS;
 
 try {

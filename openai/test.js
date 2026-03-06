@@ -46,9 +46,9 @@ const PRESET = __ENV.PRESET || 'breaking';
 let STAGES;
 
 try {
-    STAGES = JSON.parse(open(`../../presets/${PRESET}.json`));
+    STAGES = JSON.parse(open(`../shared/presets/${PRESET}.json`));
 } catch (e) {
-    throw new Error(`Unknown preset "${PRESET}" — make sure presets/${PRESET}.json exists`);
+    throw new Error(`Unknown preset "${PRESET}" — make sure shared/presets/${PRESET}.json exists`);
 }
 
 // =============================================================================
@@ -59,7 +59,7 @@ if (!QUESTIONS_FILE) {
     throw new Error('QUESTIONS_FILE is required — e.g. make run SCRIPT=openai QUESTIONS_FILE=cloudcix');
 }
 
-const QUESTIONS_PATH = `../../questions/${QUESTIONS_FILE}.json`;
+const QUESTIONS_PATH = `questions/${QUESTIONS_FILE}.json`;
 let QUESTIONS;
 try {
     QUESTIONS = JSON.parse(open(QUESTIONS_PATH));
@@ -126,7 +126,7 @@ export function setup() {
 // =============================================================================
 export default function () {
     const question = QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)];
-    const startTime = Date.now();
+    let startTime = null;
     let firstChunkTime = null;
     let lastChunkTime = null;
     let chunkCount = 0;
@@ -153,6 +153,9 @@ export default function () {
     }
     const payload = JSON.stringify(requestBody);
 
+    // Start timer right before making the HTTP request
+    startTime = Date.now();
+    
     const res = sse.open(
         COMPLETIONS_URL,
         {
