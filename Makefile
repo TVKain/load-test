@@ -1,9 +1,12 @@
 # Load .env first so its values are available before defaults are set
+# Skip the check if we're running the env target
+ifneq ($(MAKECMDGOALS),env)
 ifneq (,$(wildcard .env))
     include .env
     export
 else
     $(error No .env file found. Run: make env ENV=<name>  e.g. make env ENV=production)
+endif
 endif
 
 # =============================================================================
