@@ -14,7 +14,6 @@ venv/
 contact/results/
 openai/results/
 scraping/results/
-*.json
 *.png
 summary.txt
 
