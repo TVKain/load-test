@@ -5,7 +5,7 @@ A collection of k6-based load testing suites for benchmarking CloudCIX ML APIs. 
 ## Test Suites
 
 - **[contact/](contact/)** — CloudCIX Contact API (conversation + SSE streaming)
-- **[openai/](openai/)** — `/chat/completions` endpoints (vLLM, llama.cpp, Ollama, etc.)
+- **[openai/](openai/)** — `/chat/completions` endpoints
 - **[scraping/](scraping/)** — CloudCIX Scraping API (HTML/PDF document extraction)
 
 ## Quick Start
