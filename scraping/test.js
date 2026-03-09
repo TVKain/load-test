@@ -74,6 +74,8 @@ export const options = {
         'scraping_latency_ms': ['p(95)<30000'],
         'scraping_failed': ['count<100'],
     },
+    // For debugging: limit iterations
+    iterations: __ENV.MAX_ITERATIONS ? parseInt(__ENV.MAX_ITERATIONS) : undefined,
 };
 
 // =============================================================================
@@ -85,7 +87,7 @@ export function setup() {
     console.log(`Exclusions: ${SCRAPING_EXCLUSIONS ? JSON.stringify(SCRAPING_EXCLUSIONS) : 'none'}`);
     console.log(`Sleep between iterations: ${SCRAPING_SLEEP_MIN}–${SCRAPING_SLEEP_MAX}s`);
     console.log(`Stages: ${JSON.stringify(STAGES)}`);
-    console.log(`URLs pool: ${URLS.length} URLs from ${URLS_PATH}`);
+    console.log(`Total URLs: ${URLS.length} (all sent in one request per iteration)`);
     return {};
 }
 
@@ -93,15 +95,10 @@ export function setup() {
 // Default VU
 // =============================================================================
 export default function () {
-    const url = URLS[Math.floor(Math.random() * URLS.length)];
-    
     scraping_total.add(1);
 
-    const urlPreview = url.length > 80 ? `${url.slice(0, 80)}...` : url;
-    console.log(`[VU ${__VU}] ⏳ Scraping: ${urlPreview}`);
-
     const requestBody = {
-        list: [url],
+        list: URLS,  // Send ALL URLs in one request
         document_type: SCRAPING_DOCUMENT_TYPE,
         api_key: SCRAPING_API_KEY,
     };
@@ -119,7 +116,7 @@ export default function () {
             headers: {
                 'Content-Type': 'application/json',
             },
-            timeout: '300s',
+            timeout: '1000s',
         }
     );
 
@@ -134,20 +131,12 @@ export default function () {
     if (ok) {
         scraping_success.add(1);
         response_size_bytes.add(res.body.length);
-        console.log(`[VU ${__VU}] ✓ Success — ${latency}ms, ${(res.body.length / 1024).toFixed(2)} KB`);
+        const preview = res.body.length > 200 ? res.body.slice(0, 200) + '...' : res.body;
+        console.log(`⏱ Request completed: ${latency}ms`);
+        console.log(`📄 Response preview: ${preview}`);
     } else {
         scraping_failed.add(1);
-        if (res.status === 401 || res.status === 403) {
-            console.error(`[VU ${__VU}] ✗ ${res.status} Unauthorized — check SCRAPING_API_KEY`);
-        } else if (res.status === 429) {
-            console.warn(`[VU ${__VU}] ✗ 429 Rate Limited`);
-        } else if (res.status === 500 || res.status === 502 || res.status === 503) {
-            console.warn(`[VU ${__VU}] ✗ ${res.status} Server Error`);
-        } else if (res.status === 0) {
-            console.error(`[VU ${__VU}] ✗ Timeout after ${latency}ms`);
-        } else {
-            console.warn(`[VU ${__VU}] ✗ Failed — status=${res.status}, latency=${latency}ms`);
-        }
+        console.error(`[VU ${__VU}] ✗ Failed — status=${res.status}, latency=${latency}ms`);
     }
 
     if (SCRAPING_SLEEP_MAX > 0) {
@@ -183,22 +172,22 @@ export function handleSummary(data) {
 
     if (latency) {
         summary += 'Latency (ms):\n';
-        summary += `  min: ${latency.min.toFixed(0)}\n`;
-        summary += `  p50: ${latency.med.toFixed(0)}\n`;
-        summary += `  p95: ${latency['p(95)'].toFixed(0)}\n`;
-        summary += `  p99: ${latency['p(99)'].toFixed(0)}\n`;
-        summary += `  max: ${latency.max.toFixed(0)}\n`;
-        summary += `  avg: ${latency.avg.toFixed(0)}\n`;
+        summary += `  min: ${(latency.min || 0).toFixed(0)}\n`;
+        summary += `  p50: ${(latency.med || 0).toFixed(0)}\n`;
+        summary += `  p95: ${(latency['p(95)'] || 0).toFixed(0)}\n`;
+        summary += `  p99: ${(latency['p(99)'] || 0).toFixed(0)}\n`;
+        summary += `  max: ${(latency.max || 0).toFixed(0)}\n`;
+        summary += `  avg: ${(latency.avg || 0).toFixed(0)}\n`;
         summary += '\n';
     }
 
     if (responseSize) {
         summary += 'Response Size (KB):\n';
-        summary += `  min: ${(responseSize.min / 1024).toFixed(2)}\n`;
-        summary += `  p50: ${(responseSize.med / 1024).toFixed(2)}\n`;
-        summary += `  p95: ${(responseSize['p(95)'] / 1024).toFixed(2)}\n`;
-        summary += `  max: ${(responseSize.max / 1024).toFixed(2)}\n`;
-        summary += `  avg: ${(responseSize.avg / 1024).toFixed(2)}\n`;
+        summary += `  min: ${((responseSize.min || 0) / 1024).toFixed(2)}\n`;
+        summary += `  p50: ${((responseSize.med || 0) / 1024).toFixed(2)}\n`;
+        summary += `  p95: ${((responseSize['p(95)'] || 0) / 1024).toFixed(2)}\n`;
+        summary += `  max: ${((responseSize.max || 0) / 1024).toFixed(2)}\n`;
+        summary += `  avg: ${((responseSize.avg || 0) / 1024).toFixed(2)}\n`;
         summary += '\n';
     }
 
