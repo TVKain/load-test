@@ -1,4 +1,4 @@
-# CloudCIX Benchmarks
+# CloudCIX ML Benchmarks
 
 A collection of k6-based load testing suites for benchmarking CloudCIX ML APIs. Each test is self-contained with its own configuration, data, and results.
 
